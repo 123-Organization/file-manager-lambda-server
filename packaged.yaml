@@ -1,0 +1,211 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Node.js Lambda function for file management serverless apis
+Resources:
+  MyApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      Cors:
+        AllowOrigin: '''*'''
+        AllowHeaders: '''*'''
+        AllowMethods: '''OPTIONS,GET,POST,PUT,DELETE'''
+        AllowCredentials: 'true'
+    Metadata:
+      SamResourceId: MyApiGateway
+  MyLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: LambdaBasicExecutionPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: arn:aws:logs:*:*:*
+      - PolicyName: S3AccessPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - s3:*
+            Resource: '*'
+    Metadata:
+      SamResourceId: MyLambdaExecutionRole
+  FileManagementServerLessDevServer:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: FileManagementServerLessDevServer
+      Handler: lambda.handler
+      Role:
+        Fn::GetAtt:
+        - MyLambdaExecutionRole
+        - Arn
+      Runtime: nodejs18.x
+      CodeUri: s3://serverless-filemanagement-devlopment/94995ab75a1e10084dca30fd0dc9e01c
+      MemorySize: 3008
+      Timeout: 900
+      Environment:
+        Variables:
+          DEBUG: app*
+      Events:
+        MainEntryRoute:
+          Type: Api
+          Properties:
+            Path: /
+            Method: GET
+        GetAllListImages:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: MyApiGateway
+            Method: POST
+            Path: /api/getallimages
+        UpdateImage:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: MyApiGateway
+            Method: PUT
+            Path: /api/updateimage
+        uploadImage:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: MyApiGateway
+            Method: POST
+            Path: /api/uploadimage
+        startUploadImages:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: MyApiGateway
+            Method: GET
+            Path: /api/start-upload
+        getUploadUrl:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: MyApiGateway
+            Method: GET
+            Path: /api/get-upload-url
+        completeUpload:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: MyApiGateway
+            Method: POST
+            Path: /api/complete-upload
+        printImages:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: MyApiGateway
+            Method: POST
+            Path: /api/printimages
+        getListFileSelection:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: MyApiGateway
+            Method: POST
+            Path: /api/get-list-file-selection
+        saveImage:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: MyApiGateway
+            Method: POST
+            Path: /api/saveimages
+        webhookArtzipUpload:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: MyApiGateway
+            Method: POST
+            Path: /api/webhook-artzip-upload
+        getmycredentials:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: MyApiGateway
+            Method: POST
+            Path: /api/getmycredentials
+        deleteImage:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: MyApiGateway
+            Method: DELETE
+            Path: /api/deleteimage
+        uploadImageByURL:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: MyApiGateway
+            Method: POST
+            Path: /api/uploadimageurl
+    Metadata:
+      SamResourceId: FileManagementServerLessDevServer
+  WebSocketAPI:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: WebSocketAPI
+      ProtocolType: WEBSOCKET
+    Metadata:
+      SamResourceId: WebSocketAPI
+  WebSocketIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId:
+        Ref: WebSocketAPI
+      IntegrationType: AWS_PROXY
+      IntegrationUri:
+        Fn::Sub:
+        - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
+        - LambdaArn:
+            Fn::GetAtt:
+            - FileManagementServerLessDevServer
+            - Arn
+    Metadata:
+      SamResourceId: WebSocketIntegration
+  WebSocketRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId:
+        Ref: WebSocketAPI
+      RouteKey: $default
+      AuthorizationType: NONE
+      Target:
+        Ref: WebSocketIntegration
+    Metadata:
+      SamResourceId: WebSocketRoute
+  WebSocketDeployment:
+    Type: AWS::ApiGatewayV2::Deployment
+    Properties:
+      ApiId:
+        Ref: WebSocketAPI
+    Metadata:
+      SamResourceId: WebSocketDeployment
+  WebSocketStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId:
+        Ref: WebSocketAPI
+      DeploymentId:
+        Ref: WebSocketDeployment
+      StageName: prod
+    Metadata:
+      SamResourceId: WebSocketStage

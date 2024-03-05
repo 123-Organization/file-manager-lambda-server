@@ -1,0 +1,34 @@
+{
+  "name": "filemanagementapp",
+  "version": "1.0.0",
+  "description": "This app contains BE of the fineworks app",
+  "main": "lambda.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "set DEBUG=app:* & node app.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.511.0",
+    "aws-lambda": "^1.0.7",
+    "axios": "^1.6.7",
+    "body-parser": "^1.20.2",
+    "cors": "^2.8.5",
+    "debug": "^4.3.4",
+    "dotenv": "^16.4.2",
+    "exif": "^0.6.0",
+    "express": "^4.18.2",
+    "gm": "^1.25.0",
+    "image-size": "^1.1.1",
+    "jimp": "^0.22.10",
+    "multer": "^1.4.5-lts.1",
+    "multer-s3": "^3.0.1",
+    "node-fetch": "^3.3.2",
+    "nodemon": "^2.0.22",
+    "probe-image-size": "^7.2.3",
+    "serverless-http": "^3.2.0",
+    "socket.io": "^4.7.4",
+    "uuidv4": "^6.2.13"
+  }
+}
