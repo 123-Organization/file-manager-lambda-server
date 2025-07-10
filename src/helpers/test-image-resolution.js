@@ -2,6 +2,9 @@ const Jimp = require('jimp');
 const debug = require('debug');
 const log = debug('app:testImageResolution');
 const sizeOf = require('image-size');
+const probe = require('probe-image-size');
+const https = require('https');
+const http = require('http');
 const axios = require('axios');
 // for processing the large Image
 const { pipeline } = require('stream');
@@ -52,27 +55,49 @@ async function getCorrectedSize(width, height, orientation) {
 
     return { width, height };
 }
-async function getImageDataInBuffer(url) {
-    try {
-        const response = await axios.get(url, {
-            responseType: 'arraybuffer'
-        });
+// async function getImageDataInBuffer(url) {
+//     try {
+//         const response = await axios.get(url, {
+//             responseType: 'arraybuffer'
+//         });
 
-        // The image data will be available in response.data as a Buffer
-        return response.data;
-    } catch (error) {
-        console.error('Error fetching image data:', error);
-        throw error; // Handle or propagate the error as needed
-    }
+//         // The image data will be available in response.data as a Buffer
+//         return response.data;
+//     } catch (error) {
+//         console.error('Error fetching image data:', error);
+//         throw error; // Handle or propagate the error as needed
+//     }
+// }
+
+async function getImageDataInBuffer(url) {
+    const protocol = url.startsWith('https') ? https : http; // Check the protocol (http or https)
+
+    return new Promise((resolve, reject) => {
+      protocol.get(url, (res) => {
+        probe(res)
+          .then(dimensions => resolve(dimensions))
+          .catch(err => reject(err));
+      }).on('error', reject);
+    });
 }
 
 const testImageResolution = async (url) => {
     log(`start testing Image resolution ${JSON.stringify(url)}`);
-        
+    console.log("insidestep1");
     const imageBufferData = await getImageDataInBuffer(url);
+    console.log("imageBufferData======>",imageBufferData);
+    return imageBufferData
+    console.log("insidestep1");
+    console.log("insidestep2");
+
     const buffer = Buffer.from(imageBufferData, 'binary');
+    console.log("insidestep2");
+
     try {
+        console.log("insidestep3");
       const imageData = await getJimpInformation(buffer);
+      console.log("insidestep3");
+
       log(`imageData is ${imageData}`);
       if(!imageData){
         log(`Reached to find other way to get width & height`);
@@ -90,6 +115,9 @@ const testImageResolution = async (url) => {
     }
 
 }
+
+
+
 
 async function getJimpInformation(buffer){
     try {

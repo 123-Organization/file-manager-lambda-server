@@ -46,7 +46,7 @@ Resources:
   FileManagementServerLessDevServer:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: FileManagementServerLessDevServer
+      FunctionName: FileManagementServerLessDevServerNew
       Handler: lambda.handler
       Role: !GetAtt MyLambdaExecutionRole.Arn
       Runtime: nodejs18.x
@@ -60,6 +60,7 @@ Resources:
         MainEntryRoute:
           Type: Api 
           Properties:
+            RestApiId: !Ref MyApiGateway
             Path: /
             Method: GET
         GetAllListImages:
