@@ -47,14 +47,14 @@ Resources:
   FileManagementServerLessDevServer:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: FileManagementServerLessDevServer
+      FunctionName: FileManagementServerLessDevServerNew
       Handler: lambda.handler
       Role:
         Fn::GetAtt:
         - MyLambdaExecutionRole
         - Arn
       Runtime: nodejs18.x
-      CodeUri: s3://serverless-filemanagement-devlopment/94995ab75a1e10084dca30fd0dc9e01c
+      CodeUri: s3://serverless-filemanagement-apis/f9378cd497e243ce0a8c4903e8fecfd5
       MemorySize: 3008
       Timeout: 900
       Environment:
@@ -159,53 +159,3 @@ Resources:
             Path: /api/uploadimageurl
     Metadata:
       SamResourceId: FileManagementServerLessDevServer
-  WebSocketAPI:
-    Type: AWS::ApiGatewayV2::Api
-    Properties:
-      Name: WebSocketAPI
-      ProtocolType: WEBSOCKET
-    Metadata:
-      SamResourceId: WebSocketAPI
-  WebSocketIntegration:
-    Type: AWS::ApiGatewayV2::Integration
-    Properties:
-      ApiId:
-        Ref: WebSocketAPI
-      IntegrationType: AWS_PROXY
-      IntegrationUri:
-        Fn::Sub:
-        - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
-        - LambdaArn:
-            Fn::GetAtt:
-            - FileManagementServerLessDevServer
-            - Arn
-    Metadata:
-      SamResourceId: WebSocketIntegration
-  WebSocketRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId:
-        Ref: WebSocketAPI
-      RouteKey: $default
-      AuthorizationType: NONE
-      Target:
-        Ref: WebSocketIntegration
-    Metadata:
-      SamResourceId: WebSocketRoute
-  WebSocketDeployment:
-    Type: AWS::ApiGatewayV2::Deployment
-    Properties:
-      ApiId:
-        Ref: WebSocketAPI
-    Metadata:
-      SamResourceId: WebSocketDeployment
-  WebSocketStage:
-    Type: AWS::ApiGatewayV2::Stage
-    Properties:
-      ApiId:
-        Ref: WebSocketAPI
-      DeploymentId:
-        Ref: WebSocketDeployment
-      StageName: prod
-    Metadata:
-      SamResourceId: WebSocketStage
