@@ -3,10 +3,16 @@ const app = express();
 const cors = require('cors');
 require('dotenv').config();
 const http = require('http');
+// app.use(cors({
+//     origin: 'http://localhost:3000', // Allow requests from this origin
+//     methods: ['GET', 'POST', 'DELETE', 'OPTIONS'], // Allow only specified methods
+//     allowedHeaders: ['Content-Type', 'Authorization'], // Allow only specified headers
+//     credentials: true // Allow credentials (e.g., cookies)
+// }));
 app.use(cors({
-    origin: 'http://localhost:3000', // Allow requests from this origin
-    methods: ['GET', 'POST', 'DELETE', 'OPTIONS'], // Allow only specified methods
-    allowedHeaders: ['Content-Type', 'Authorization'], // Allow only specified headers
+    origin: '*', // Allow requests from this origin
+    methods: ['*'], // Allow only specified methods
+    allowedHeaders: ['*'], // Allow only specified headers
     credentials: true // Allow credentials (e.g., cookies)
 }));
 app.options('*', cors());
