@@ -2,7 +2,7 @@ const { Router } = require('express');
 const { getAllImages } = require('./get-all-images');
 const { updateImage } = require('./update-image');
 const { deleteImage } = require('./delete-image');
-const { startUploadImages, getUploadUrl, completeUpload, saveImage } = require('./upload-image');
+const { startUploadImages, getUploadUrl, completeUpload, saveImage,completeUploadV2,processUploadedImageV2 } = require('./upload-image');
 const { printImages } = require('./print-image');
 const { getListFileSelection } = require('./get-list-file-selection');
 const { webhookArtzipUpload } = require('./webhook-artzip-upload');
@@ -21,4 +21,8 @@ app.post('/saveimages',saveImage);
 app.post('/getmycredentials',getMyCredentials);
 app.post('/webhook-artzip-upload', webhookArtzipUpload);
 app.post('/uploadimageurl',uploadImageByURL);
+app.post('/complete-uploadV2',completeUploadV2);
+app.post('/final-upload',processUploadedImageV2);
+
+
 module.exports = app;

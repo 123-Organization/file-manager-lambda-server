@@ -33,6 +33,8 @@ exports.getAllImages = async (req, res) => {
         statusCode: 200,
         status: true,
         data: getImages,
+        test:true,
+        new1:true
       });
     } catch (error) {
       /** Log Event */

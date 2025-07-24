@@ -60,6 +60,7 @@ Resources:
         MainEntryRoute:
           Type: Api 
           Properties:
+            RestApiId: !Ref MyApiGateway
             Path: /
             Method: GET
         GetAllListImages:

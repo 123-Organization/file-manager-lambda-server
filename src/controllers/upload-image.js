@@ -154,8 +154,8 @@ exports.completeUpload = async (req, res) => {
       UploadId: req.body.params.uploadId,
       MultipartUpload: {
         Parts: req.body.params.parts,
-      },
-    };
+      }
+        };
     const finalData = uploadImageProcess(params, req)
       .then((result) => {
         res.send({ result });
@@ -166,72 +166,258 @@ exports.completeUpload = async (req, res) => {
       });
 };
 
-function uploadImageProcess(params, req) {
+
+
+// function uploadImageProcess(params, req) {
+//     log(`Proceed for Upload Image process`);
+//     return new Promise((resolve, reject) =>
+//       s3.completeMultipartUpload(params, (err, data) => {
+//         if (err) {
+//           log(`uploadImageProcess error ${JSON.stringify(err)}`);
+//           reject(err);
+//         } else {
+//           if (data) {
+//             const { userInfo, fileSize } = req.body.params;
+//             const { Key } = data;
+//             const {
+//               libraryName,
+//               librarySessionId,
+//               libraryAccountKey,
+//               librarySiteId,
+//             } = userInfo;
+//             const obj = {
+//               title: "",
+//               description: "",
+//               libraryName,
+//               librarySessionId,
+//               libraryAccountKey,
+//               librarySiteId,
+//             };
+//             /** Final Upload images on finerwork apis */
+//             let intervalId;
+//             const fileDetails = [
+//               {
+//                 fileSize: fileSize,
+//                 fileName: Key,
+//               },
+//             ];
+//             let counter = 0;
+//             intervalId = setInterval(async () => {
+//               const result = await checkImageUrls(
+//                 fileDetails,
+//                 intervalId,
+//                 counter,
+//                 libraryName,
+//                 libraryAccountKey
+//               );
+//               if (result) {
+//                 const files = fileDetails[0];
+//                 const imageUrl = getImageUrl(libraryName, files.fileName, 'original', libraryAccountKey)
+//                 const uploadedImages = {
+//                   key: files.fileName,
+//                   size: files.fileSize,
+//                   location: `${imageUrl}`,
+//                   bucket: getBucketName(libraryName),
+//                   originalImage: files.fileName
+//                 };
+//                 log(`Prepared to upload Image details ${JSON.stringify(uploadedImages)}`);
+//                 getImageUploaded(obj, uploadedImages).then((data) => {
+//                   const resultData = {
+//                     statusCode: 200,
+//                     status: true,
+//                     message: "Images has been uploaded successfully",
+//                     guid: data.images[0].guid,
+//                   };
+//                   resolve(resultData);
+//                 });
+//               }
+//             }, 5000);
+//           }
+//         }
+//       })
+//     );
+// }
+
+
+const uploadImageProcess = (params, req) => {
+  log(`Proceed for Upload Image process`);
+  console.log("params=========",params);
+  return new Promise((resolve, reject) => {
+    s3.completeMultipartUpload(params, async (err, data) => {
+      if (err) {
+        log(`uploadImageProcess error ${JSON.stringify(err)}`);
+        return reject(err);
+      }
+
+      if (data) {
+        const { userInfo, fileSize } = req.body.params;
+        const { Key } = data;
+        const {
+          libraryName,
+          librarySessionId,
+          libraryAccountKey,
+          librarySiteId,
+        } = userInfo;
+
+        const obj = {
+          title: "",
+          description: "",
+          libraryName,
+          librarySessionId,
+          libraryAccountKey,
+          librarySiteId,
+        };
+
+        const fileDetails = [
+          {
+            fileSize: fileSize,
+            fileName: Key,
+          },
+        ];
+
+        try {
+          const result = await checkImageUrls(fileDetails, libraryName, libraryAccountKey);
+
+          if (result) {
+            const files = fileDetails[0];
+            const imageUrl = getImageUrl(libraryName, files.fileName, 'original', libraryAccountKey);
+            const uploadedImages = {
+              key: files.fileName,
+              size: files.fileSize,
+              location: `${imageUrl}`,
+              bucket: getBucketName(libraryName),
+              originalImage: files.fileName
+            };
+
+            log(`Prepared to upload Image details ${JSON.stringify(uploadedImages)}`);
+            const data = await getImageUploaded(obj, uploadedImages);
+            console.log("data",data);
+            const resultData = {
+              statusCode: 200,
+              status: true,
+              message: "Images have been uploaded successfully",
+              guid: data.images[0].guid,
+              new1:true
+            };
+            log(`Prepared to upload Image SUCCESFULLY================== ${JSON.stringify(resultData)}`);
+
+            resolve(resultData);
+          }
+        } catch (error) {
+          reject(error);
+        }
+      }
+    });
+  });
+};
+
+exports.completeUploadV2 = async (req, res) => {
+  try {
+    log(`Proceed to complete the upload part for the image`);
+    const userInfo = req.body.params.userInfo;
+    const params = {
+      Bucket: getBucketName(userInfo.libraryName),
+      Key: String(getFileNameWithFolder(req.body.params.fileName, userInfo.libraryAccountKey)),
+      UploadId: req.body.params.uploadId,
+      MultipartUpload: {
+        Parts: req.body.params.parts,
+      },
+    };
+
+    // Await the result of the uploadImageProcess function
+    const result = await completeUploadSErviceV2(params);
+    res.status(200).send({ result });
+  } catch (error) {
+    log(`completeUpload error ${JSON.stringify(error)}`);
+    console.error(error);
+    res.status(500).send({ error: 'Error in completing upload' });
+  }
+};
+
+const completeUploadSErviceV2 = async (params) => {
+  try {
     log(`Proceed for Upload Image process`);
-    return new Promise((resolve, reject) =>
+
+    // Using Promisify for completeMultipartUpload since it's a callback-based function
+    const data = await new Promise((resolve, reject) => {
       s3.completeMultipartUpload(params, (err, data) => {
         if (err) {
-          log(`uploadImageProcess error ${JSON.stringify(err)}`);
-          reject(err);
-        } else {
-          if (data) {
-            const { userInfo, fileSize } = req.body.params;
-            const { Key } = data;
-            const {
-              libraryName,
-              librarySessionId,
-              libraryAccountKey,
-              librarySiteId,
-            } = userInfo;
-            const obj = {
-              title: "",
-              description: "",
-              libraryName,
-              librarySessionId,
-              libraryAccountKey,
-              librarySiteId,
-            };
-            /** Final Upload images on finerwork apis */
-            let intervalId;
-            const fileDetails = [
-              {
-                fileSize: fileSize,
-                fileName: Key,
-              },
-            ];
-            let counter = 0;
-            intervalId = setInterval(async () => {
-              const result = await checkImageUrls(
-                fileDetails,
-                intervalId,
-                counter,
-                libraryName,
-                libraryAccountKey
-              );
-              if (result) {
-                const files = fileDetails[0];
-                const imageUrl = getImageUrl(libraryName, files.fileName, 'original', libraryAccountKey)
-                const uploadedImages = {
-                  key: files.fileName,
-                  size: files.fileSize,
-                  location: `${imageUrl}`,
-                  bucket: getBucketName(libraryName),
-                  originalImage: files.fileName
-                };
-                log(`Prepared to upload Image details ${JSON.stringify(uploadedImages)}`);
-                getImageUploaded(obj, uploadedImages).then((data) => {
-                  const resultData = {
-                    statusCode: 200,
-                    status: true,
-                    message: "Images has been uploaded successfully",
-                    guid: data.images[0].guid,
-                  };
-                  resolve(resultData);
-                });
-              }
-            }, 5000);
-          }
+          return reject(err);
         }
-      })
-    );
-}
+        resolve(data);
+      });
+    });
+
+    // Handle successful upload
+    log(`S3 Multipart Upload Completed. File Key: ${data.Key}`);
+    return {
+      success: true,
+      message: 'Upload completed',
+      fileKey: data.Key,
+      bucket: data.Bucket,
+    };
+
+  } catch (error) {
+    // Handle error in the try block
+    log(`completeUpload error ${JSON.stringify(error)}`);
+    throw new Error(error.message);
+  }
+};
+
+
+exports.processUploadedImageV2 = async (req, res) => {
+  try {
+    const { userInfo, fileSize, fileKey } = req.body.params;
+    const { libraryName, librarySessionId, libraryAccountKey, librarySiteId } = userInfo;
+
+    const obj = {
+      title: "",
+      description: "",
+      libraryName,
+      librarySessionId,
+      libraryAccountKey,
+      librarySiteId,
+    };
+
+    const fileDetails = [{ fileSize, fileName: fileKey }];
+
+    const result = await checkImageUrls(fileDetails, libraryName, libraryAccountKey);
+    console.log("result=====================",result);
+    // return;
+
+    if (result) {
+      const files = fileDetails[0];
+      const imageUrl = getImageUrl(libraryName, files.fileName, 'original', libraryAccountKey);
+      console.log("imageUrl============>>>>>>>>>>>>>",imageUrl);
+      const uploadedImages = {
+        key: files.fileName,
+        size: files.fileSize,
+        location: imageUrl,
+        bucket: getBucketName(libraryName),
+        originalImage: files.fileName,
+      };
+
+      log(`Prepared to upload Image details ${JSON.stringify(uploadedImages)}`);
+      console.log("uploadedImages============>>>",uploadedImages);
+      const data = await getImageUploaded(obj, uploadedImages);
+      console.log("data=======",data);
+      
+      const resultData = {
+        statusCode: 200,
+        status: true,
+        message: "Images have been uploaded successfully",
+        guid: data.images[0].guid,
+        new1: true,
+      };
+
+      log(`Image Processed Successfully ${JSON.stringify(resultData)}`);
+      return res.status(200).json(resultData);
+    } else {
+      throw new Error("Invalid image or processing failed");
+    }
+
+  } catch (error) {
+    log(`Error in processUploadedImage: ${error.message}`);
+    return res.status(500).json({ status: false, message: error.message });
+  }
+};
