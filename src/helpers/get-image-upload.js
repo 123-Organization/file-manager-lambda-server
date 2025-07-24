@@ -7,6 +7,9 @@ const debug = require('debug');
 const log = debug('app:getImageUploaded');
 const createEvent = require('./create-event');
 const getImageUploaded = async (obj, uploadedImages) => {
+  console.log("obj",obj);
+  console.log("uploadedImages",uploadedImages);
+
     const {
       title,
       description,
@@ -19,6 +22,8 @@ const getImageUploaded = async (obj, uploadedImages) => {
     /** check for Tiff & Bmp file*/
     console.log("step1");
     const getFileNameToBeUploaded = await checkForImageExtensionForTiffNBmp(uploadedImages.key);
+    const originalImageName = extractImageName(uploadedImages);
+    console.log("imageName===========",originalImageName);  
     console.log("step1");
     console.log("step2");
 
@@ -29,7 +34,6 @@ const getImageUploaded = async (obj, uploadedImages) => {
 
     log('imageSize:', imageSize);
     console.log("step3");
-
     /** Extract Image name from the URL */
     const imageName = getFileName(getFileNameToBeUploaded);
     console.log("step3");
@@ -46,7 +50,7 @@ const getImageUploaded = async (obj, uploadedImages) => {
         {
           title: title ? title : "",
           description: description ? description : "",
-          file_name: imageName,
+          file_name: originalImageName,
           file_size: uploadedImages.size,
           thumbnail_file_name: `200x200_${imageName}`,
           preview_file_name: imageName,
@@ -66,11 +70,19 @@ const getImageUploaded = async (obj, uploadedImages) => {
       },
     };
     log(`Prepared to upload the Image details to finerwork service ${JSON.stringify(payloadForFinerWorks)}`);
-    console.log("step5");
+    console.log("step5",payloadForFinerWorks);
     const getImage = await finerworksService.POST_IMAGE(payloadForFinerWorks);
     console.log("step5");
 
     return getImage;
 };
 
+
+function extractImageName(data) {
+  const pathParts = data.key.split('/');
+  const fullFileName = pathParts[pathParts.length - 1]; // Get the last part of the path
+  // Remove the prefix (e.g., 'm175336025013500678__') using a regular expression
+  const fileName = fullFileName.replace(/^[^_]*__/, ''); 
+  return fileName;
+}
 module.exports = getImageUploaded;

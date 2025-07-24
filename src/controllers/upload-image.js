@@ -154,8 +154,8 @@ exports.completeUpload = async (req, res) => {
       UploadId: req.body.params.uploadId,
       MultipartUpload: {
         Parts: req.body.params.parts,
-      },
-    };
+      }
+        };
     const finalData = uploadImageProcess(params, req)
       .then((result) => {
         res.send({ result });
@@ -241,6 +241,7 @@ exports.completeUpload = async (req, res) => {
 
 const uploadImageProcess = (params, req) => {
   log(`Proceed for Upload Image process`);
+  console.log("params=========",params);
   return new Promise((resolve, reject) => {
     s3.completeMultipartUpload(params, async (err, data) => {
       if (err) {

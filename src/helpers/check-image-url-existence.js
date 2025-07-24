@@ -63,8 +63,12 @@ const checkImageUrls = async (fileDetails, libraryName, libraryAccountKey) => {
       getJpegImageName = `${imageUrl.fileName.replace(/\.\w+$/, ".jpg")}`;
     }
 
+    console.log("isFileNameChanged==========>>>>>",isFileNameChanged);
+
+
     try {
       if (isFileNameChanged) {
+
         const getOriginalURL = getImageUrl(libraryName, getJpegImageName, 'original', libraryAccountKey);
         getThumbnailURL = getImageUrl(libraryName, getJpegImageName, 'thumbnail', libraryAccountKey);
         await axios.get(getOriginalURL);
