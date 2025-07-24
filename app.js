@@ -9,7 +9,6 @@ const http = require('http');
 //     allowedHeaders: ['Content-Type', 'Authorization'], // Allow only specified headers
 //     credentials: true // Allow credentials (e.g., cookies)
 // }));
-
 app.use(cors({
     origin: '*', // Allow requests from this origin
     methods: ['*'], // Allow only specified methods
