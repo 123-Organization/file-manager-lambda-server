@@ -54,7 +54,7 @@ Resources:
         - MyLambdaExecutionRole
         - Arn
       Runtime: nodejs18.x
-      CodeUri: s3://serverless-filemanagement-apis/91432856e068166720e62617250acdd4
+      CodeUri: s3://serverless-filemanagement-apis/fba1397c89a4d5096ad57827aca9f5a9
       MemorySize: 3008
       Timeout: 900
       Environment:
@@ -159,5 +159,12 @@ Resources:
               Ref: MyApiGateway
             Method: POST
             Path: /api/uploadimageurl
+        StartUploadVectorImage:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: MyApiGateway
+            Method: GET
+            Path: /api/start-upload-vector-image
     Metadata:
       SamResourceId: FileManagementServerLessDevServer

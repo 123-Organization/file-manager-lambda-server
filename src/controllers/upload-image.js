@@ -101,7 +101,7 @@ exports.startUploadImages = (req, res) => {
       };
   
   
-      return new Promise((resolve, reject) =>
+        return new Promise((resolve, reject) =>
         s3.createMultipartUpload(params, (err, uploadData) => {
           if (err) {
             reject(err);
@@ -116,6 +116,51 @@ exports.startUploadImages = (req, res) => {
       return err;
     }
 };
+
+exports.startUploadImagesV2 = (req, res) => {
+  log('start upload image for SVG');
+  const bucketName = getBucketName(req.query.fileLibrary);
+  console.log("bucketName",bucketName);
+
+  const fileType = req.query.fileType;  // Get the file type from the request
+  console.log("fileType===============>>>>>>", fileType);
+  try {
+    // Ensure the file type is SVG
+    if (fileType !== 'image/svg+xml') {
+      return res.status(400).send({ error: 'Only SVG files are supported in this version' });
+    }
+    let params = {
+      Bucket: bucketName,
+      Tagging: req.query.basecampProjectID,
+      ACL: "public-read",
+    };
+    console.log("params",params);
+
+    // Step 1: Handle SVG - raw upload
+    params.ContentType = 'image/svg+xml';
+    const svgFileName = `${getFileNameWithFolder(req.query.fileName, req.query.libraryAccountKey)}`;
+    console.log("svgFileName=========>>>>>>", svgFileName);
+    
+    // Start the raw SVG file upload
+    s3.createMultipartUpload({ ...params, Key: svgFileName }, (err, svgUploadData) => {
+      if (err) {
+        return res.status(500).send({ error: 'Error starting SVG upload', details: err });
+      }
+
+      // Return the upload ID for the SVG
+      return res.send({
+        svgUploadId: svgUploadData.UploadId,
+        message: 'SVG upload started successfully.',
+      });
+    });
+  } catch (err) {
+    log(`startUploadImagesV2 error ${JSON.stringify(err)}`);
+    console.log(err);
+    return res.status(500).send({ error: 'Unexpected error', details: err });
+  }
+};
+
+
 
 exports.getUploadUrl = (req, res) => {
     log(`Get upload url`);

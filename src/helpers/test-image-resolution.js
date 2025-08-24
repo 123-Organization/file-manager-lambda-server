@@ -46,15 +46,58 @@ const pipelineAsync = promisify(pipeline);
 //     }
 // }
 
-async function getCorrectedSize(width, height, orientation) {
+// async function getCorrectedSize(width, height, orientation) {
 
-    // Swap width and height if orientation requires it
-    if (orientation && [5, 6, 7, 8].includes(orientation)) {
-        [width, height] = [height, width];
+//     // Swap width and height if orientation requires it
+//     if (orientation && [5, 6, 7, 8].includes(orientation)) {
+//         [width, height] = [height, width];
+//     }
+
+//     return { width, height };
+// }
+
+
+async function getCorrectedSize(width, height, orientation) {
+    // EXIF orientation values:
+    // 1 = Normal (0°)
+    // 2 = Flipped horizontally
+    // 3 = Rotated 180°
+    // 4 = Flipped vertically
+    // 5 = Rotated 90° CCW and flipped horizontally
+    // 6 = Rotated 90° CW
+    // 7 = Rotated 90° CW and flipped horizontally  
+    // 8 = Rotated 90° CCW (or 270° CW)
+
+    if (!orientation || orientation === 1) {
+        // Normal orientation, no changes needed
+        return { width, height };
     }
 
+    // Orientations 5, 6, 7, 8 require swapping width and height
+    // because the image is rotated 90° or 270°
+    if ([5, 6, 7, 8].includes(orientation)) {
+        // console.log(EXIF orientation ${orientation} detected: swapping width/height);
+        return { width: height, height: width };
+    }
+
+    // Orientations 2, 3, 4 don't require dimension swapping
+    // (they're flips or 180° rotation)
+    // console.log(EXIF orientation ${orientation} detected: keeping original dimensions);
     return { width, height };
 }
+// async function getImageDataInBuffer(url) {
+//     try {
+//         const response = await axios.get(url, {
+//             responseType: 'arraybuffer'
+//         });
+
+//         // The image data will be available in response.data as a Buffer
+//         return response.data;
+//     } catch (error) {
+//         console.error('Error fetching image data:', error);
+//         throw error; // Handle or propagate the error as needed
+//     }
+// }
 // async function getImageDataInBuffer(url) {
 //     try {
 //         const response = await axios.get(url, {
@@ -81,39 +124,84 @@ async function getImageDataInBuffer(url) {
     });
 }
 
+
+async function getImageHeadersOnly(url) {
+    const protocol = url.startsWith('https') ? https : http;
+    
+    return new Promise((resolve, reject) => {
+        protocol.get(url, (res) => {
+            // Use probe-image-size which reads only headers, not full image
+            probe(res)
+                .then(dimensions => {
+                    res.destroy(); // Stop downloading immediately after headers
+                    resolve(dimensions);
+                })
+                .catch(err => {
+                    res.destroy();
+                    reject(err);
+                });
+        }).on('error', reject);
+    });
+}
+
+// const testImageResolution = async (url) => {
+//     log(`start testing Image resolution ${JSON.stringify(url)}`);
+//     console.log("insidestep1");
+//     const imageBufferData = await getImageDataInBuffer(url);
+//     console.log("imageBufferData======>",imageBufferData);
+//     return imageBufferData
+// }
+
 const testImageResolution = async (url) => {
-    log(`start testing Image resolution ${JSON.stringify(url)}`);
-    console.log("insidestep1");
-    const imageBufferData = await getImageDataInBuffer(url);
-    console.log("imageBufferData======>",imageBufferData);
-    return imageBufferData
-    console.log("insidestep1");
-    console.log("insidestep2");
-
-    const buffer = Buffer.from(imageBufferData, 'binary');
-    console.log("insidestep2");
-
+    console.log(" Fast header-only processing...");
+    
     try {
-        console.log("insidestep3");
-      const imageData = await getJimpInformation(buffer);
-      console.log("insidestep3");
-
-      log(`imageData is ${imageData}`);
-      if(!imageData){
-        log(`Reached to find other way to get width & height`);
-        const dimensions = sizeOf(imageBufferData);
-        const { width, height } = dimensions;
-        log('Width:', width);
-        log('Height:', height);
-        return { width, height }
-      } else{
-        return imageData;
-      }
-    } catch (e) {
-        log(`getting an error while check Image resolution ${JSON.stringify(e)}`);
-        console.log("getting an error while check Image resolution", JSON.stringify(e));
+        // Use probe-image-size - only reads image headers, not full file!
+        const imageInfo = await getImageHeadersOnly(url);
+        console.log(" Image info from headers:", imageInfo);
+        
+        let { width, height } = imageInfo;
+        const orientation = imageInfo.orientation || imageInfo.exif?.Orientation;
+        
+        console.log("🔍 EXIF orientation found:", orientation);
+        
+        if (orientation) {
+            // Apply orientation correction without downloading full image
+            const correctedSize = await getCorrectedSize(width, height, orientation);
+            return {
+                width: correctedSize.width,
+                height: correctedSize.height,
+                hasExif: true,
+                orientation: orientation,
+                originalWidth: width,
+                originalHeight: height
+            };
+        } else {
+            return {
+                width,
+                height,
+                hasExif: false
+            };
+        }
+        
+    } catch (error) {
+        console.log("Error details:", error);
+        
+        // Ultra-light fallback - just get basic dimensions
+        try {
+            console.log("🔄 Fallback: basic probe without EXIF...");
+            const basicInfo = await getImageHeadersOnly(url);
+            return {
+                width: basicInfo.width,
+                height: basicInfo.height,
+                hasExif: false,
+                fallback: true
+            };
+        } catch (fallbackError) {
+            console.log(" All methods failed:", fallbackError);
+            throw new Error(`Could not get image dimensions: ${fallbackError.message}`);
+        }
     }
-
 }
 
 
