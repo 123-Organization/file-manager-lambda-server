@@ -30,6 +30,7 @@
     "nodemon": "^2.0.22",
     "probe-image-size": "^7.2.3",
     "serverless-http": "^3.2.0",
+    "sharp": "^0.34.3",
     "socket.io": "^4.7.4",
     "uuidv4": "^6.2.13"
   }

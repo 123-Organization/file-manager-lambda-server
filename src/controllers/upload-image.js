@@ -466,3 +466,167 @@ exports.processUploadedImageV2 = async (req, res) => {
     return res.status(500).json({ status: false, message: error.message });
   }
 };
+
+exports.completeUploadV2WithConversion = async (req, res) => {
+  try {
+    log(`Proceed to complete the upload part for SVG image with PNG conversion`);
+    const userInfo = req.body.params.userInfo;
+    const { uploadId, fileName, folderPath } = req.body.params;
+    
+    const params = {
+      Bucket: getBucketName(userInfo.libraryName),
+      Key: String(getFileNameWithFolder(fileName, userInfo.libraryAccountKey)),
+      UploadId: uploadId,
+      MultipartUpload: {
+        Parts: req.body.params.parts,
+      },
+    };
+
+    // Complete the multipart upload for SVG
+    const uploadResult = await completeUploadSErviceV2(params);
+    console.log("uploadResult=======>>>>",uploadResult);
+    
+    if (uploadResult.success) {
+      // Convert SVG to PNG and upload both files
+      const conversionResult = await convertSvgToPngAndUpload(params, userInfo, fileName, folderPath);
+      console.log("conversionResult==========>>>>>>>",conversionResult);
+      
+      // Update Fineworks API with both SVG and PNG files
+      const apiResult = await updateFineworksAPIWithBothFiles(userInfo, fileName, folderPath, conversionResult);
+      console.log("apiResult",apiResult);
+      
+      res.status(200).json({
+        statusCode: 200,
+        status: true,
+        message: "SVG upload completed with PNG conversion",
+        svgFile: uploadResult.fileKey,
+        pngFile: conversionResult.pngKey,
+        guid: apiResult.images[0].guid
+      });
+    } else {
+      throw new Error("Failed to complete SVG upload");
+    }
+    
+  } catch (error) {
+    log(`completeUploadV2WithConversion error ${JSON.stringify(error)}`);
+    console.error(error);
+    res.status(500).json({ 
+      status: false, 
+      message: error.message 
+    });
+  }
+};
+
+const convertSvgToPngAndUpload = async (params, userInfo, fileName, folderPath) => {
+  try {
+    const sharp = require('sharp');
+    const bucketName = getBucketName(userInfo.libraryName);
+    
+    // Download the SVG file from S3
+    const svgObject = await s3.getObject({
+      Bucket: bucketName,
+      Key: params.Key
+    }).promise();
+    
+    // Convert SVG to PNG using sharp
+    const pngBuffer = await sharp(svgObject.Body)
+      .png()
+      .toBuffer();
+    
+    // Create PNG filename (same name, different extension)
+    const pngFileName = fileName.replace(/\.svg$/i, '.png');
+    const pngKey = String(getFileNameWithFolder(pngFileName, userInfo.libraryAccountKey));
+    
+    // Upload PNG to S3
+    await s3.putObject({
+      Bucket: bucketName,
+      Key: pngKey,
+      Body: pngBuffer,
+      ContentType: 'image/png',
+      ACL: 'public-read'
+    }).promise();
+    
+    log(`PNG conversion and upload completed: ${pngKey}`);
+    
+    return {
+      pngKey: pngKey,
+      pngFileName: pngFileName,
+      pngSize: pngBuffer.length
+    };
+    
+  } catch (error) {
+    log(`Error in SVG to PNG conversion: ${JSON.stringify(error)}`);
+    throw new Error(`SVG to PNG conversion failed: ${error.message}`);
+  }
+};
+
+const updateFineworksAPIWithBothFiles = async (userInfo, fileName, folderPath, conversionResult) => {
+  try {
+    const { libraryName, librarySessionId, libraryAccountKey, librarySiteId } = userInfo;
+    
+    // Get file sizes for both files
+    const bucketName = getBucketName(libraryName);
+    
+    // Get SVG file size
+    const svgKey = String(getFileNameWithFolder(fileName, libraryAccountKey));
+    const svgObject = await s3.headObject({
+      Bucket: bucketName,
+      Key: svgKey
+    }).promise();
+    
+    // Get PNG file size
+    const pngObject = await s3.headObject({
+      Bucket: bucketName,
+      Key: conversionResult.pngKey
+    }).promise();
+    
+    // Create payload for Fineworks API with both files
+    const obj = {
+      title: "",
+      description: "",
+      libraryName,
+      librarySessionId,
+      libraryAccountKey,
+      librarySiteId,
+    };
+    
+    // SVG file details
+    const svgImageUrl = getImageUrl(libraryName, svgKey, 'original', libraryAccountKey);
+    const svgUploadedImages = {
+      key: svgKey,
+      size: svgObject.ContentLength,
+      location: svgImageUrl,
+      bucket: bucketName,
+      originalImage: fileName
+    };
+    console.log("svgImageUrl=========>>>>>>>",svgImageUrl);
+    
+    // PNG file details
+    const pngImageUrl = getImageUrl(libraryName, conversionResult.pngKey, 'original', libraryAccountKey);
+    const pngUploadedImages = {
+      key: conversionResult.pngKey,
+      size: pngObject.ContentLength,
+      location: pngImageUrl,
+      bucket: bucketName,
+      originalImage: conversionResult.pngFileName
+    };
+
+    console.log("svgImageUrl=========>>>>>>>",svgImageUrl);
+
+    
+    // Upload SVG to Fineworks API
+    // const svgResult = await getImageUploaded(obj, svgUploadedImages);
+    
+    // Upload PNG to Fineworks API
+    const pngResult = await getImageUploaded(obj, pngUploadedImages);
+    
+    log(`Both SVG and PNG files uploaded to Fineworks API successfully`);
+    
+    // Return the SVG result (or you could return both if needed)
+    return pngResult;
+    
+  } catch (error) {
+    log(`Error updating Fineworks API: ${JSON.stringify(error)}`);
+    throw new Error(`Failed to update Fineworks API: ${error.message}`);
+  }
+};
