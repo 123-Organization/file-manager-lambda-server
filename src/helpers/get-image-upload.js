@@ -6,7 +6,7 @@ const finerworksService = require('./finerworks-service');
 const debug = require('debug');
 const log = debug('app:getImageUploaded');
 const createEvent = require('./create-event');
-const getImageUploaded = async (obj, uploadedImages,extractedFilename) => {
+const getImageUploaded = async (obj, uploadedImages) => {
   console.log("obj",obj);
   console.log("uploadedImages",uploadedImages);
 
@@ -50,7 +50,7 @@ const getImageUploaded = async (obj, uploadedImages,extractedFilename) => {
         {
           title: title ? title : "",
           description: description ? description : "",
-          file_name: extractedFilename,
+          file_name: originalImageName,
           file_size: uploadedImages.size,
           thumbnail_file_name: `200x200_${imageName}`,
           preview_file_name: imageName,

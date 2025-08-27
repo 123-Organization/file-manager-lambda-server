@@ -472,10 +472,7 @@ exports.completeUploadV2WithConversion = async (req, res) => {
     log(`Proceed to complete the upload part for SVG image with PNG conversion`);
     const userInfo = req.body.params.userInfo;
     const { uploadId, fileName, folderPath } = req.body.params;
-    console.log("fileName==================",fileName);
-    const extractedFilename=extractImageName(fileName);
-    console.log("extractedFilename==================",extractedFilename);
-
+    
     const params = {
       Bucket: getBucketName(userInfo.libraryName),
       Key: String(getFileNameWithFolder(fileName, userInfo.libraryAccountKey)),
@@ -495,7 +492,7 @@ exports.completeUploadV2WithConversion = async (req, res) => {
       console.log("conversionResult==========>>>>>>>",conversionResult);
       
       // Update Fineworks API with both SVG and PNG files
-      const apiResult = await updateFineworksAPIWithBothFiles(userInfo, fileName, folderPath, conversionResult,extractedFilename);
+      const apiResult = await updateFineworksAPIWithBothFiles(userInfo, fileName, folderPath, conversionResult);
       console.log("apiResult",apiResult);
       
       res.status(200).json({
@@ -519,8 +516,6 @@ exports.completeUploadV2WithConversion = async (req, res) => {
     });
   }
 };
-
-
 
 const convertSvgToPngAndUpload = async (params, userInfo, fileName, folderPath) => {
   try {
@@ -565,7 +560,7 @@ const convertSvgToPngAndUpload = async (params, userInfo, fileName, folderPath) 
   }
 };
 
-const updateFineworksAPIWithBothFiles = async (userInfo, fileName, folderPath, conversionResult,extractedFilename) => {
+const updateFineworksAPIWithBothFiles = async (userInfo, fileName, folderPath, conversionResult) => {
   try {
     const { libraryName, librarySessionId, libraryAccountKey, librarySiteId } = userInfo;
     
@@ -623,7 +618,7 @@ const updateFineworksAPIWithBothFiles = async (userInfo, fileName, folderPath, c
     // const svgResult = await getImageUploaded(obj, svgUploadedImages);
     
     // Upload PNG to Fineworks API
-    const pngResult = await getImageUploaded(obj, pngUploadedImages,extractedFilename);
+    const pngResult = await getImageUploaded(obj, pngUploadedImages);
     
     log(`Both SVG and PNG files uploaded to Fineworks API successfully`);
     
@@ -635,10 +630,3 @@ const updateFineworksAPIWithBothFiles = async (userInfo, fileName, folderPath, c
     throw new Error(`Failed to update Fineworks API: ${error.message}`);
   }
 };
-
-function extractImageName(data) {
-  const fullFileName = data; // No need to split by '/'
-  // Extract the part after the last '__' and return it
-  const fileName = fullFileName.split('__').pop(); // Split by '__' and get the last part
-  return fileName;
-}

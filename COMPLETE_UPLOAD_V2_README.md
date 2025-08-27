@@ -181,4 +181,3 @@ export DEBUG=app:UploadImage
 - Configurable PNG quality and dimensions
 - Batch processing for multiple files
 - Progress tracking for large conversions -->
-
