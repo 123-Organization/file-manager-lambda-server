@@ -1,9 +1,12 @@
+const sharp = require('sharp');
 const AWS = require("aws-sdk");
 const getBucketName = require('../helpers/get-bucket-name');
 const getFileNameWithFolder = require('../helpers/get-file-name-with-folder');
 const getImageUrl = require('../helpers/get-image-url');
 const checkImageUrls = require('../helpers/check-image-url-existence');
-const getImageUploaded = require('../helpers/get-image-upload');
+// const getImageUploaded = require('../helpers/get-image-upload');
+const { getImageUploaded, getImageUploadedv2 } = require('../helpers/get-image-upload');
+
 const checkForImageExtensionForTiffNBmp = require('../helpers/get-image-extenstion-for-bmp-n-tiff');
 const debug = require('debug');
 const log = debug('app:UploadImage');
@@ -158,6 +161,54 @@ exports.startUploadImagesV2 = (req, res) => {
     console.log(err);
     return res.status(500).send({ error: 'Unexpected error', details: err });
   }
+};
+
+
+exports.startBulkUploadPdfImages = (req, res) => {
+  log('start bulk upload images');
+  
+  // Accept array of objects from the request body
+  const files = req.body;
+
+  // Validate the input array
+  if (!Array.isArray(files) || files.length === 0) {
+    return res.status(400).send({ error: 'Invalid input: Array of files is required' });
+  }
+
+  // Process each file in the array
+  const uploadPromises = files.map((file) => {
+    const bucketName = getBucketName(file.fileLibrary);
+    
+    const params = {
+      Bucket: bucketName,
+      Key: getFileNameWithFolder(file.fileName, file.libraryAccountKey),
+      ContentType: file.fileType,
+      Tagging: file.basecampProjectID,
+      ACL: "public-read",
+    };
+
+    return new Promise((resolve, reject) => {
+      s3.createMultipartUpload(params, (err, uploadData) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({ fileName: file.fileName, uploadId: uploadData.UploadId });
+        }
+      });
+    });
+  });
+
+  // Wait for all uploads to complete
+  Promise.all(uploadPromises)
+    .then((uploadResults) => {
+      // Send all the uploadIds for the files
+      res.send({ uploads: uploadResults });
+    })
+    .catch((err) => {
+      log(`startBulkUploadImages error ${JSON.stringify(err)}`);
+      console.log(err);
+      res.status(500).send({ error: 'Failed to upload files', details: err });
+    });
 };
 
 
@@ -472,6 +523,9 @@ exports.completeUploadV2WithConversion = async (req, res) => {
     log(`Proceed to complete the upload part for SVG image with PNG conversion`);
     const userInfo = req.body.params.userInfo;
     const { uploadId, fileName, folderPath } = req.body.params;
+    console.log("fileName==================",fileName);
+    const extractedFilename=extractImageName(fileName);
+    console.log("extractedFilename==================",extractedFilename);
     
     const params = {
       Bucket: getBucketName(userInfo.libraryName),
@@ -492,7 +546,7 @@ exports.completeUploadV2WithConversion = async (req, res) => {
       console.log("conversionResult==========>>>>>>>",conversionResult);
       
       // Update Fineworks API with both SVG and PNG files
-      const apiResult = await updateFineworksAPIWithBothFiles(userInfo, fileName, folderPath, conversionResult);
+      const apiResult = await updateFineworksAPIWithBothFiles(userInfo, fileName, folderPath, conversionResult,extractedFilename);
       console.log("apiResult",apiResult);
       
       res.status(200).json({
@@ -519,7 +573,6 @@ exports.completeUploadV2WithConversion = async (req, res) => {
 
 const convertSvgToPngAndUpload = async (params, userInfo, fileName, folderPath) => {
   try {
-    const sharp = require('sharp');
     const bucketName = getBucketName(userInfo.libraryName);
     
     // Download the SVG file from S3
@@ -527,7 +580,6 @@ const convertSvgToPngAndUpload = async (params, userInfo, fileName, folderPath) 
       Bucket: bucketName,
       Key: params.Key
     }).promise();
-    
     // Convert SVG to PNG using sharp
     const pngBuffer = await sharp(svgObject.Body)
       .png()
@@ -560,7 +612,7 @@ const convertSvgToPngAndUpload = async (params, userInfo, fileName, folderPath) 
   }
 };
 
-const updateFineworksAPIWithBothFiles = async (userInfo, fileName, folderPath, conversionResult) => {
+const updateFineworksAPIWithBothFiles = async (userInfo, fileName, folderPath, conversionResult,extractedFilename) => {
   try {
     const { libraryName, librarySessionId, libraryAccountKey, librarySiteId } = userInfo;
     
@@ -618,7 +670,7 @@ const updateFineworksAPIWithBothFiles = async (userInfo, fileName, folderPath, c
     // const svgResult = await getImageUploaded(obj, svgUploadedImages);
     
     // Upload PNG to Fineworks API
-    const pngResult = await getImageUploaded(obj, pngUploadedImages);
+    const pngResult = await getImageUploadedv2(obj, pngUploadedImages,svgImageUrl,extractedFilename);
     
     log(`Both SVG and PNG files uploaded to Fineworks API successfully`);
     
@@ -630,3 +682,10 @@ const updateFineworksAPIWithBothFiles = async (userInfo, fileName, folderPath, c
     throw new Error(`Failed to update Fineworks API: ${error.message}`);
   }
 };
+
+function extractImageName(data) {
+  const fullFileName = data; // No need to split by '/'
+  // Extract the part after the last '__' and return it
+  const fileName = fullFileName.split('__').pop(); // Split by '__' and get the last part
+  return fileName;
+}

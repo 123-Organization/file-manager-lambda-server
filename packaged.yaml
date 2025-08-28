@@ -54,7 +54,7 @@ Resources:
         - MyLambdaExecutionRole
         - Arn
       Runtime: nodejs18.x
-      CodeUri: s3://serverless-filemanagement-apis/d9c33121ea3f3ca98d27a9e6f0224293
+      CodeUri: s3://serverless-filemanagement-apis/0341a1ef3d3c87d3aaf311a30e3e9a6b
       MemorySize: 3008
       Timeout: 900
       Environment:
