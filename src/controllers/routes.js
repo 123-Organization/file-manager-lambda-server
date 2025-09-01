@@ -2,7 +2,7 @@ const { Router } = require('express');
 const { getAllImages } = require('./get-all-images');
 const { updateImage } = require('./update-image');
 const { deleteImage } = require('./delete-image');
-const { startUploadImages,startBulkUploadPdfImages, startUploadImagesV2,getUploadUrl, completeUpload, saveImage,completeUploadV2,processUploadedImageV2, completeUploadV2WithConversion } = require('./upload-image');
+const { startUploadImages,startBulkUploadPdfImages, startUploadImagesV2,getUploadUrl,getUploadUrlPdf, completeUpload, saveImage,completeUploadV2,processUploadedImageV2, completeUploadV2WithConversion, completeUploadV2WithPdfConversion } = require('./upload-image');
 const { printImages } = require('./print-image');
 const { getListFileSelection } = require('./get-list-file-selection');
 const { webhookArtzipUpload } = require('./webhook-artzip-upload');
@@ -25,7 +25,10 @@ app.post('/uploadimageurl',uploadImageByURL);
 app.post('/complete-uploadV2',completeUploadV2);
 app.post('/final-upload',processUploadedImageV2);
 app.post('/complete-upload-v2',completeUploadV2WithConversion);
+app.post('/complete-upload-v2-pdf',completeUploadV2WithPdfConversion);
 app.post('/start-upload-pdf',startBulkUploadPdfImages);
+app.post('/get-upload-url-pdf',getUploadUrlPdf);
+
 
 
 module.exports = app;

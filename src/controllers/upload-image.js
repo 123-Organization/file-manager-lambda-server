@@ -1,5 +1,6 @@
 const sharp = require('sharp');
 const AWS = require("aws-sdk");
+const pdf2img = require('pdf-img-convert');
 const getBucketName = require('../helpers/get-bucket-name');
 const getFileNameWithFolder = require('../helpers/get-file-name-with-folder');
 const getImageUrl = require('../helpers/get-image-url');
@@ -182,9 +183,12 @@ exports.startBulkUploadPdfImages = (req, res) => {
     const params = {
       Bucket: bucketName,
       Key: getFileNameWithFolder(file.fileName, file.libraryAccountKey),
-      ContentType: file.fileType,
+      ContentType: 'application/pdf',
       Tagging: file.basecampProjectID,
       ACL: "public-read",
+      Metadata: {
+        'original-filename': file.fileName
+      }
     };
 
     return new Promise((resolve, reject) => {
@@ -240,6 +244,52 @@ exports.getUploadUrl = (req, res) => {
       return err;
     }
 };
+
+
+exports.getUploadUrlPdf = async (req, res) => {
+  log(`Get upload url`);
+
+  // Extract the payload array from the request body
+  const payload = req.body;
+
+  try {
+    // Initialize an empty array to hold the promises for each presigned URL
+    const promises = payload.map((item) => {
+      const { uploadId, fileName, partNumber, fileLibrary, libraryAccountKey } = item;
+
+      const bucketName = getBucketName(fileLibrary); // Get bucket name from fileLibrary
+      let params = {
+        Bucket: bucketName,
+        Key: String(getFileNameWithFolder(fileName, libraryAccountKey)), // Generate file key
+        UploadId: uploadId,
+        PartNumber: partNumber,
+      };
+
+      // Return a promise for each presigned URL
+      return new Promise((resolve, reject) => {
+        s3.getSignedUrl("uploadPart", params, (err, presignedUrl) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve({ uploadId, presignedUrl });
+          }
+        });
+      });
+    });
+
+    // Wait for all promises to resolve concurrently
+    const presignedUrls = await Promise.all(promises);
+
+    // Send the response with the array of presigned URLs
+    res.send({ presignedUrls });
+  } catch (err) {
+    log(`getUploadUrl error ${JSON.stringify(err)}`);
+    console.log(err);
+    return res.status(500).send({ error: 'Failed to generate presigned URLs' });
+  }
+};
+
+
 
 exports.completeUpload = async (req, res) => {
     log(`Proceed to complete the upload part for the image`);
@@ -665,9 +715,9 @@ const updateFineworksAPIWithBothFiles = async (userInfo, fileName, folderPath, c
 
     console.log("svgImageUrl=========>>>>>>>",svgImageUrl);
 
-    
+
     // Upload SVG to Fineworks API
-    // const svgResult = await getImageUploaded(obj, svgUploadedImages);
+// const svgResult = await getImageUploaded(obj, svgUploadedImages);
     
     // Upload PNG to Fineworks API
     const pngResult = await getImageUploadedv2(obj, pngUploadedImages,svgImageUrl,extractedFilename);
@@ -683,9 +733,191 @@ const updateFineworksAPIWithBothFiles = async (userInfo, fileName, folderPath, c
   }
 };
 
+const updateFineworksAPIWithBothFilesForPdf = async (userInfo, fileName, folderPath, conversionResult, extractedFilename) => {
+  try {
+    const { libraryName, librarySessionId, libraryAccountKey, librarySiteId } = userInfo;
+    
+    // Get file sizes for both files
+    const bucketName = getBucketName(libraryName);
+    
+    // Get PDF file size
+    const pdfKey = String(getFileNameWithFolder(fileName, libraryAccountKey));
+    const pdfObject = await s3.headObject({
+      Bucket: bucketName,
+      Key: pdfKey
+    }).promise();
+    
+    // Get PNG file size
+    const pngObject = await s3.headObject({
+      Bucket: bucketName,
+      Key: conversionResult.pngKey
+    }).promise();
+    
+    // Create payload for Fineworks API with both files
+    const obj = {
+      title: "",
+      description: "",
+      libraryName,
+      librarySessionId,
+      libraryAccountKey,
+      librarySiteId,
+    };
+    
+    // PDF file details
+    const pdfImageUrl = getImageUrl(libraryName, pdfKey, 'original', libraryAccountKey);
+    const pdfUploadedImages = {
+      key: pdfKey,
+      size: pdfObject.ContentLength,
+      location: pdfImageUrl,
+      bucket: bucketName,
+      originalImage: fileName,
+      contentType: 'application/pdf'
+    };
+    console.log("pdfImageUrl=========>>>>>>>",pdfImageUrl);
+    
+    // PNG file details
+    const pngImageUrl = getImageUrl(libraryName, conversionResult.pngKey, 'original', libraryAccountKey);
+    const pngUploadedImages = {
+      key: conversionResult.pngKey,
+      size: pngObject.ContentLength,
+      location: pngImageUrl,
+      bucket: bucketName,
+      originalImage: conversionResult.pngFileName,
+      contentType: 'image/png'
+    };
+
+    console.log("pngImageUrl=========>>>>>>>",pngImageUrl);
+
+    // Upload both files to Fineworks API
+    const result = await getImageUploadedv2(obj, pngUploadedImages, pdfImageUrl, extractedFilename);
+    
+    log(`Both PDF and PNG files uploaded to Fineworks API successfully`);
+    
+    return result;
+    
+  } catch (error) {
+    log(`Error updating Fineworks API: ${JSON.stringify(error)}`);
+    throw new Error(`Failed to update Fineworks API: ${error.message}`);
+  }
+};
+
 function extractImageName(data) {
   const fullFileName = data; // No need to split by '/'
   // Extract the part after the last '__' and return it
   const fileName = fullFileName.split('__').pop(); // Split by '__' and get the last part
   return fileName;
 }
+
+const convertPdfToPngAndUpload = async (params, userInfo, fileName, folderPath) => {
+  try {
+    const bucketName = getBucketName(userInfo.libraryName);
+    
+    // Download the file from S3
+    const fileObject = await s3.getObject({
+      Bucket: bucketName,
+      Key: params.Key
+    }).promise();
+    console.log("fileObject====>>>",fileObject);
+
+    let pngBuffer;
+    
+    // Check if the file is already a PNG by looking at magic numbers
+    const isPNG = fileObject.Body[0] === 0x89 && 
+                  fileObject.Body[1] === 0x50 && 
+                  fileObject.Body[2] === 0x4E && 
+                  fileObject.Body[3] === 0x47;
+
+    if (isPNG) {
+      // If it's already a PNG, use it directly
+      pngBuffer = fileObject.Body;
+      console.log("File is already a PNG, using it directly");
+    } else {
+      // Convert PDF to PNG using pdf2img
+      const pngPages = await pdf2img.convert(fileObject.Body, {
+        width: 2000, // Adjust width as needed
+        height: 2000, // Adjust height as needed
+        page_numbers: [1], // Only convert first page
+        base64: false
+      });
+      pngBuffer = pngPages[0];
+    }
+    
+    // Create PNG filename (same name, different extension)
+    const pngFileName = fileName.replace(/\.(pdf|png)$/i, '.png');
+    const pngKey = String(getFileNameWithFolder(pngFileName, userInfo.libraryAccountKey));
+    
+    // Upload PNG to S3
+    await s3.putObject({
+      Bucket: bucketName,
+      Key: pngKey,
+      Body: pngBuffer,
+      ContentType: 'image/png',
+      ACL: 'public-read'
+    }).promise();
+    
+    log(`File processing and upload completed: ${pngKey}`);
+    
+    return {
+      pngKey: pngKey,
+      pngFileName: pngFileName,
+      pngSize: pngBuffer.length
+    };
+    
+  } catch (error) {
+    log(`Error in PDF to PNG conversion: ${JSON.stringify(error)}`);
+    throw new Error(`PDF to PNG conversion failed: ${error.message}`);
+  }
+};
+
+exports.completeUploadV2WithPdfConversion = async (req, res) => {
+  try {
+    log(`Proceed to complete the upload part for PDF with PNG conversion`);
+    const userInfo = req.body.params.userInfo;
+    const { uploadId, fileName, folderPath } = req.body.params;
+    console.log("fileName==================",fileName);
+    const extractedFilename = extractImageName(fileName);
+    console.log("extractedFilename==================",extractedFilename);
+    
+    const params = {
+      Bucket: getBucketName(userInfo.libraryName),
+      Key: String(getFileNameWithFolder(fileName, userInfo.libraryAccountKey)),
+      UploadId: uploadId,
+      MultipartUpload: {
+        Parts: req.body.params.parts,
+      },
+    };
+
+    // Complete the multipart upload for PDF
+    const uploadResult = await completeUploadSErviceV2(params);
+    console.log("uploadResult=======>>>>",uploadResult);
+    
+    if (uploadResult.success) {
+      // Convert PDF to PNG and upload both files
+      const conversionResult = await convertPdfToPngAndUpload(params, userInfo, fileName, folderPath);
+      console.log("conversionResult==========>>>>>>>",conversionResult);
+      
+      // Update Fineworks API with both PDF and PNG files
+      const apiResult = await updateFineworksAPIWithBothFilesForPdf(userInfo, fileName, folderPath, conversionResult, extractedFilename);
+      console.log("apiResult",apiResult);
+      
+      res.status(200).json({
+        statusCode: 200,
+        status: true,
+        message: "PDF upload completed with PNG conversion",
+        pdfFile: uploadResult.fileKey,
+        pngFile: conversionResult.pngKey,
+        guid: apiResult.images[0].guid
+      });
+    } else {
+      throw new Error("Failed to complete PDF upload");
+    }
+    
+  } catch (error) {
+    log(`completeUploadV2WithPdfConversion error ${JSON.stringify(error)}`);
+    console.error(error);
+    res.status(500).json({ 
+      status: false, 
+      message: error.message 
+    });
+  }
+};

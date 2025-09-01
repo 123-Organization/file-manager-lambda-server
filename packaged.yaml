@@ -2,7 +2,7 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: Node.js Lambda function for file management serverless apis
 Resources:
-  MyApiGateway:
+  MyDevApiGateway:
     Type: AWS::Serverless::Api
     Properties:
       StageName: Prod
@@ -12,8 +12,8 @@ Resources:
         AllowMethods: '''OPTIONS,GET,POST,PUT,DELETE'''
         AllowCredentials: 'true'
     Metadata:
-      SamResourceId: MyApiGateway
-  MyLambdaExecutionRole:
+      SamResourceId: MyDevApiGateway
+  MyLambdaExecutionRoleDev:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -43,18 +43,18 @@ Resources:
             - s3:*
             Resource: '*'
     Metadata:
-      SamResourceId: MyLambdaExecutionRole
+      SamResourceId: MyLambdaExecutionRoleDev
   FileManagementServerLessDevServer:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: FileManagementServerLessDevServerNew
+      FunctionName: FileManagementServerLessDevServerDevelop
       Handler: lambda.handler
       Role:
         Fn::GetAtt:
-        - MyLambdaExecutionRole
+        - MyLambdaExecutionRoleDev
         - Arn
       Runtime: nodejs18.x
-      CodeUri: s3://serverless-filemanagement-apis/0341a1ef3d3c87d3aaf311a30e3e9a6b
+      CodeUri: s3://serverless-filemanagement-dev-apis/841aaa6b661708863689824656096da4
       MemorySize: 3008
       Timeout: 900
       Environment:
@@ -65,113 +65,134 @@ Resources:
           Type: Api
           Properties:
             RestApiId:
-              Ref: MyApiGateway
+              Ref: MyDevApiGateway
             Path: /
             Method: GET
         GetAllListImages:
           Type: Api
           Properties:
             RestApiId:
-              Ref: MyApiGateway
+              Ref: MyDevApiGateway
             Method: POST
             Path: /api/getallimages
         UpdateImage:
           Type: Api
           Properties:
             RestApiId:
-              Ref: MyApiGateway
+              Ref: MyDevApiGateway
             Method: PUT
             Path: /api/updateimage
         uploadImage:
           Type: Api
           Properties:
             RestApiId:
-              Ref: MyApiGateway
+              Ref: MyDevApiGateway
             Method: POST
             Path: /api/uploadimage
         startUploadImages:
           Type: Api
           Properties:
             RestApiId:
-              Ref: MyApiGateway
+              Ref: MyDevApiGateway
             Method: GET
             Path: /api/start-upload
         getUploadUrl:
           Type: Api
           Properties:
             RestApiId:
-              Ref: MyApiGateway
+              Ref: MyDevApiGateway
             Method: GET
             Path: /api/get-upload-url
         completeUpload:
           Type: Api
           Properties:
             RestApiId:
-              Ref: MyApiGateway
+              Ref: MyDevApiGateway
             Method: POST
             Path: /api/complete-upload
         printImages:
           Type: Api
           Properties:
             RestApiId:
-              Ref: MyApiGateway
+              Ref: MyDevApiGateway
             Method: POST
             Path: /api/printimages
         getListFileSelection:
           Type: Api
           Properties:
             RestApiId:
-              Ref: MyApiGateway
+              Ref: MyDevApiGateway
             Method: POST
             Path: /api/get-list-file-selection
         saveImage:
           Type: Api
           Properties:
             RestApiId:
-              Ref: MyApiGateway
+              Ref: MyDevApiGateway
             Method: POST
             Path: /api/saveimages
         webhookArtzipUpload:
           Type: Api
           Properties:
             RestApiId:
-              Ref: MyApiGateway
+              Ref: MyDevApiGateway
             Method: POST
             Path: /api/webhook-artzip-upload
         getmycredentials:
           Type: Api
           Properties:
             RestApiId:
-              Ref: MyApiGateway
+              Ref: MyDevApiGateway
             Method: POST
             Path: /api/getmycredentials
         deleteImage:
           Type: Api
           Properties:
             RestApiId:
-              Ref: MyApiGateway
+              Ref: MyDevApiGateway
             Method: DELETE
             Path: /api/deleteimage
         uploadImageByURL:
           Type: Api
           Properties:
             RestApiId:
-              Ref: MyApiGateway
+              Ref: MyDevApiGateway
             Method: POST
             Path: /api/uploadimageurl
         StartUploadVectorImage:
           Type: Api
           Properties:
             RestApiId:
-              Ref: MyApiGateway
+              Ref: MyDevApiGateway
             Method: GET
             Path: /api/start-upload-vector-image
         CompleteUploadV2:
           Type: Api
           Properties:
             RestApiId:
-              Ref: MyApiGateway
+              Ref: MyDevApiGateway
             Method: POST
             Path: /api/complete-upload-v2
+        StartUploadPdf:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: MyDevApiGateway
+            Method: POST
+            Path: /api/start-upload-pdf
+        GetUploadPdfUrl:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: MyDevApiGateway
+            Method: POST
+            Path: /api/get-upload-url-pdf
+        CompleteUploadPdf:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: MyDevApiGateway
+            Method: POST
+            Path: /api/complete-upload-v2-pdf
     Metadata:
       SamResourceId: FileManagementServerLessDevServer
