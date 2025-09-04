@@ -1,7 +1,6 @@
 const Jimp = require('jimp');
 const debug = require('debug');
 const log = debug('app:testImageResolution');
-const sizeOf = require('image-size');
 const probe = require('probe-image-size');
 const https = require('https');
 const http = require('http');

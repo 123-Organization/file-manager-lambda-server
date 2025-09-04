@@ -1,6 +1,6 @@
-const sharp = require('sharp');
 const AWS = require("aws-sdk");
-const pdf2img = require('pdf-img-convert');
+const { fromPath } = require('pdf2pic');
+const fs = require('fs').promises;
 const getBucketName = require('../helpers/get-bucket-name');
 const getFileNameWithFolder = require('../helpers/get-file-name-with-folder');
 const getImageUrl = require('../helpers/get-image-url');
@@ -832,14 +832,39 @@ const convertPdfToPngAndUpload = async (params, userInfo, fileName, folderPath) 
       pngBuffer = fileObject.Body;
       console.log("File is already a PNG, using it directly");
     } else {
-      // Convert PDF to PNG using pdf2img
-      const pngPages = await pdf2img.convert(fileObject.Body, {
-        width: 2000, // Adjust width as needed
-        height: 2000, // Adjust height as needed
-        page_numbers: [1], // Only convert first page
-        base64: false
-      });
-      pngBuffer = pngPages[0];
+      // Save PDF to temp file
+      const tempPdfPath = `/tmp/${fileName}`;
+      await fs.writeFile(tempPdfPath, fileObject.Body);
+
+      // Configure pdf2pic options
+      const options = {
+        density: 300,
+        saveFilename: "temp",
+        savePath: "/tmp",
+        format: "png",
+        width: 2000,
+        height: 2000
+      };
+
+      // Initialize converter
+      const convert = fromPath(tempPdfPath, options);
+      
+      try {
+        // Convert first page to PNG
+        const pageToConvertAsImage = 1;
+        const result = await convert(pageToConvertAsImage);
+        
+        // Read the generated PNG file
+        pngBuffer = await fs.readFile(result.path);
+        
+        // Clean up temp files
+        await fs.unlink(tempPdfPath);
+        await fs.unlink(result.path);
+      } catch (conversionError) {
+        // Clean up temp file even if conversion fails
+        await fs.unlink(tempPdfPath).catch(() => {});
+        throw conversionError;
+      }
     }
     
     // Create PNG filename (same name, different extension)
