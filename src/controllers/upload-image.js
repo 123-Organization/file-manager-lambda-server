@@ -1,6 +1,11 @@
 const AWS = require("aws-sdk");
-const { fromPath } = require('pdf2pic');
+const sharp = require('sharp');
+const { pdf } = require('pdf-to-img');
 const fs = require('fs').promises;
+const fsSync = require('fs');
+const path = require('path');
+const os = require('os');
+const { exec } = require('child_process');
 const getBucketName = require('../helpers/get-bucket-name');
 const getFileNameWithFolder = require('../helpers/get-file-name-with-folder');
 const getImageUrl = require('../helpers/get-image-url');
@@ -832,38 +837,61 @@ const convertPdfToPngAndUpload = async (params, userInfo, fileName, folderPath) 
       pngBuffer = fileObject.Body;
       console.log("File is already a PNG, using it directly");
     } else {
-      // Save PDF to temp file
-      const tempPdfPath = `/tmp/${fileName}`;
-      await fs.writeFile(tempPdfPath, fileObject.Body);
-
-      // Configure pdf2pic options
-      const options = {
-        density: 300,
-        saveFilename: "temp",
-        savePath: "/tmp",
-        format: "png",
-        width: 2000,
-        height: 2000
-      };
-
-      // Initialize converter
-      const convert = fromPath(tempPdfPath, options);
-      
       try {
-        // Convert first page to PNG
-        const pageToConvertAsImage = 1;
-        const result = await convert(pageToConvertAsImage);
+        console.log("Starting PDF to PNG conversion using pdf-to-img");
         
-        // Read the generated PNG file
-        pngBuffer = await fs.readFile(result.path);
+        // Create temporary directory for PDF processing
+        const tempDir = path.join(os.tmpdir(), 'pdf-conversion-' + Date.now());
+        await fs.mkdir(tempDir, { recursive: true });
+
+        try {
+          // Save PDF to temp file
+          const tempPdfPath = path.join(tempDir, 'input.pdf');
+          await fs.writeFile(tempPdfPath, fileObject.Body);
+          
+          console.log("Converting PDF to images...");
+          
+          // Convert PDF to images using pdf-to-img
+          const convert = await pdf(tempPdfPath, {
+            scale: 3.0 // Higher scale for better quality
+          });
+          
+          // Get the first page as PNG
+          let result;
+          for await (const image of convert) {
+            result = image; // Get the first image
+            break;
+          }
+          
+          if (!result) {
+            throw new Error("PDF conversion failed: No output generated");
+          }
+          
+          console.log("PDF converted successfully, optimizing with Sharp...");
+          
+          // Optimize the PNG with Sharp
+          pngBuffer = await sharp(result)
+            .resize(2000, 2000, {
+              fit: 'inside',
+              withoutEnlargement: true
+            })
+            .png({
+              quality: 75,
+              progressive: true,
+              compressionLevel: 9
+            })
+            .toBuffer();
+          
+          console.log(`PDF to PNG conversion completed. PNG size: ${pngBuffer.length} bytes`);
+          
+        } finally {
+          // Clean up temp directory
+          await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+        }
         
-        // Clean up temp files
-        await fs.unlink(tempPdfPath);
-        await fs.unlink(result.path);
       } catch (conversionError) {
-        // Clean up temp file even if conversion fails
-        await fs.unlink(tempPdfPath).catch(() => {});
-        throw conversionError;
+        console.error('PDF conversion error:', conversionError);
+        throw new Error(`PDF conversion failed: ${conversionError.message}`);
       }
     }
     
@@ -889,7 +917,7 @@ const convertPdfToPngAndUpload = async (params, userInfo, fileName, folderPath) 
     };
     
   } catch (error) {
-    log(`Error in PDF to PNG conversion: ${JSON.stringify(error)}`);
+    console.error('PDF to PNG conversion error:', error);
     throw new Error(`PDF to PNG conversion failed: ${error.message}`);
   }
 };
@@ -939,6 +967,122 @@ exports.completeUploadV2WithPdfConversion = async (req, res) => {
     
   } catch (error) {
     log(`completeUploadV2WithPdfConversion error ${JSON.stringify(error)}`);
+    console.error(error);
+    res.status(500).json({ 
+      status: false, 
+      message: error.message 
+    });
+  }
+};
+
+const convertEpsToPdfAndUpload = async (params, userInfo, fileName, folderPath) => {
+  try {
+    log(`Starting EPS to PDF conversion process`);
+    
+    // Download the EPS file from S3
+    const epsFile = await s3.getObject({
+      Bucket: params.Bucket,
+      Key: params.Key
+    }).promise();
+
+    // Create a temporary directory for processing
+    const tempDir = path.join(os.tmpdir(), 'eps-conversion-' + Date.now());
+    await fs.mkdir(tempDir, { recursive: true });
+
+    // Save EPS file locally
+    const epsPath = path.join(tempDir, 'input.eps');
+    await fs.writeFile(epsPath, epsFile.Body);
+
+    // Convert EPS to PDF using Ghostscript
+    const pdfPath = path.join(tempDir, 'output.pdf');
+    await new Promise((resolve, reject) => {
+      exec(`gs -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -sOutputFile=${pdfPath} ${epsPath}`, (error) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve();
+        }
+      });
+    });
+
+    // Upload PDF to S3
+    const pdfKey = params.Key.replace(/\.eps$/i, '.pdf');
+    const pdfContent = await fs.readFile(pdfPath);
+    await s3.putObject({
+      Bucket: params.Bucket,
+      Key: pdfKey,
+      Body: pdfContent
+    }).promise();
+
+    // Clean up temporary files
+    await fs.rm(tempDir, { recursive: true, force: true });
+
+    return {
+      success: true,
+      pdfKey: pdfKey
+    };
+  } catch (error) {
+    log(`EPS to PDF conversion failed: ${error.message}`);
+    throw new Error(`EPS to PDF conversion failed: ${error.message}`);
+  }
+};
+
+exports.completeUploadV2WithEpsConversion = async (req, res) => {
+  try {
+    log(`Proceed to complete the upload part for EPS with PDF and PNG conversion`);
+    const userInfo = req.body.params.userInfo;
+    const { uploadId, fileName, folderPath } = req.body.params;
+    console.log("fileName==================",fileName);
+    const extractedFilename = extractImageName(fileName);
+    console.log("extractedFilename==================",extractedFilename);
+    
+    const params = {
+      Bucket: getBucketName(userInfo.libraryName),
+      Key: String(getFileNameWithFolder(fileName, userInfo.libraryAccountKey)),
+      UploadId: uploadId,
+      MultipartUpload: {
+        Parts: req.body.params.parts,
+      },
+    };
+
+    // Complete the multipart upload for EPS
+    const uploadResult = await completeUploadSErviceV2(params);
+    console.log("uploadResult=======>>>>",uploadResult);
+    
+    if (uploadResult.success) {
+      // First convert EPS to PDF
+      const pdfConversionResult = await convertEpsToPdfAndUpload(params, userInfo, fileName, folderPath);
+      console.log("pdfConversionResult==========>>>>>>>",pdfConversionResult);
+
+      // Create new params for PDF to PNG conversion
+      const pdfParams = {
+        ...params,
+        Key: pdfConversionResult.pdfKey
+      };
+      
+      // Then convert PDF to PNG
+      const pngConversionResult = await convertPdfToPngAndUpload(pdfParams, userInfo, fileName.replace(/\.eps$/i, '.pdf'), folderPath);
+      console.log("pngConversionResult==========>>>>>>>",pngConversionResult);
+      
+      // Update Fineworks API with EPS, PDF and PNG files
+      const apiResult = await updateFineworksAPIWithBothFilesForPdf(userInfo, fileName, folderPath, pngConversionResult, extractedFilename);
+      console.log("apiResult",apiResult);
+      
+      res.status(200).json({
+        statusCode: 200,
+        status: true,
+        message: "EPS upload completed with PDF and PNG conversion",
+        epsFile: uploadResult.fileKey,
+        pdfFile: pdfConversionResult.pdfKey,
+        pngFile: pngConversionResult.pngKey,
+        guid: apiResult.images[0].guid
+      });
+    } else {
+      throw new Error("Failed to complete EPS upload");
+    }
+    
+  } catch (error) {
+    log(`completeUploadV2WithEpsConversion error ${JSON.stringify(error)}`);
     console.error(error);
     res.status(500).json({ 
       status: false, 
