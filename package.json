@@ -5,7 +5,7 @@
   "main": "lambda.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "set DEBUG=app:* & node app.js"
+    "start": "set DEBUG=app:* & nodemon lambda.js"
   },
   "author": "",
   "license": "ISC",
@@ -28,6 +28,8 @@
     "multer-s3": "^3.0.1",
     "node-fetch": "^3.3.2",
     "nodemon": "^2.0.22",
+    "pdf2pic": "^3.1.1",
+    "pdf-to-img": "^5.0.0",
     "probe-image-size": "^7.2.3",
     "serverless-http": "^3.2.0",
     "socket.io": "^4.7.4",
