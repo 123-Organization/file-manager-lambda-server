@@ -1,6 +1,6 @@
 const AWS = require("aws-sdk");
 const sharp = require('sharp');
-const { pdf } = require('pdf-to-img');
+const convertapi = require('convertapi')('pr94t5IFiJ1HoCh2OMDBHCxEE9BwYPAn');
 const fs = require('fs').promises;
 const fsSync = require('fs');
 const path = require('path');
@@ -942,96 +942,94 @@ const generatePresignedUrl = async (bucketName, key) => {
 const convertPdfToPngAndUpload = async (params, userInfo, fileName, folderPath) => {
   try {
     const bucketName = getBucketName(userInfo.libraryName);
+    console.log("Starting PDF conversion process...");
 
-    // Generate the presigned URL for downloading the file from S3
-    const url = await generatePresignedUrl(bucketName, params.Key);
+    // Create temporary directory for processing
+    const tempDir = path.join(os.tmpdir(), 'pdf-conversion-' + Date.now());
+    await fs.mkdir(tempDir, { recursive: true });
 
-    // Use the URL to download the file via HTTP request (with fetch)
-    const response = await fetch(url);
-    const arrayBuffer = await response.arrayBuffer(); // Use arrayBuffer() instead of buffer()
-    const fileBuffer = Buffer.from(arrayBuffer); // Convert ArrayBuffer to Buffer
+    try {
+      // Generate a presigned URL for the PDF in S3
+      const url = await generatePresignedUrl(bucketName, params.Key);
+      console.log("Generated presigned URL for PDF download");
 
-    let pngBuffer;
+      // Convert PDF to PNG using ConvertAPI
+      console.log("Starting conversion with ConvertAPI...");
+      const result = await convertapi.convert('png', {
+        File: url,
+        ImageResolutionH: 300,
+        ImageResolutionV: 300,
+        ScaleImage: true,
+        ScaleProportions: true,
+        ImageHeight: 2000,
+        ImageWidth: 2000,
+        ConvertToBinary: true
+      }, 'pdf');
 
-    // Check if the file is already a PNG
-    const isPNG = fileBuffer[0] === 0x89 && 
-                  fileBuffer[1] === 0x50 && 
-                  fileBuffer[2] === 0x4E && 
-                  fileBuffer[3] === 0x47;
+      // Download the converted PNG
+      const pngResult = await result.file.save(path.join(tempDir, 'output.png'));
+      console.log("ConvertAPI conversion completed, reading PNG file...");
 
-    if (isPNG) {
-      pngBuffer = fileBuffer; // Use the PNG directly
-    } else {
-      try {
-        console.log("Starting PDF to PNG conversion using pdf-to-img");
+      // Read the PNG file
+      const pngFile = await fs.readFile(pngResult);
 
-        // Create temporary directory for PDF processing
-        const tempDir = path.join(os.tmpdir(), 'pdf-conversion-' + Date.now());
-        await fs.mkdir(tempDir, { recursive: true });
+      // Optimize the PNG with Sharp for web delivery
+      console.log("Optimizing PNG with Sharp...");
+      const pngBuffer = await sharp(pngFile)
+        .png({
+          quality: 80,
+          progressive: true,
+          compressionLevel: 9
+        })
+        .toBuffer();
 
-        try {
-          // Save PDF to temp file
-          const tempPdfPath = path.join(tempDir, 'input.pdf');
-          await fs.writeFile(tempPdfPath, fileBuffer);
+      console.log(`PNG optimization completed. Final size: ${pngBuffer.length} bytes`);
 
-          console.log("Converting PDF to images...");
-          
-          // Convert PDF to images using pdf-to-img
-          const convert = await pdf(tempPdfPath, {
-            scale: 3.0 // Higher scale for better quality
-          });
+      // Create PNG filename and upload to S3
+      const pngFileName = fileName.replace(/\.(pdf|png)$/i, '.png');
+      const pngKey = getFileNameWithFolder(pngFileName, userInfo.libraryAccountKey);
 
-          // Get the first page as PNG
-          let result;
-          for await (const image of convert) {
-            result = image; // Get the first image
-            break;
-          }
-
-          if (!result) {
-            throw new Error("PDF conversion failed: No output generated");
-          }
-
-          console.log("PDF converted successfully, optimizing with Sharp...");
-
-          // Optimize the PNG with Sharp
-          pngBuffer = await sharp(result)
-            .resize(2000, 2000, { fit: 'inside' })
-            .png({
-              quality: 75,
-              progressive: true,
-              compressionLevel: 9
-            })
-            .toBuffer();
-
-          console.log(`PDF to PNG conversion completed. PNG size: ${pngBuffer.length} bytes`);
-        } finally {
-          // Clean up temp directory
-          await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+      // Upload optimized PNG to S3
+      await s3.putObject({
+        Bucket: bucketName,
+        Key: pngKey,
+        Body: pngBuffer,
+        ContentType: 'image/png',
+        ACL: 'public-read',
+        CacheControl: 'max-age=31536000', // Cache for 1 year
+        Metadata: {
+          'original-filename': fileName,
+          'conversion-source': 'convertapi'
         }
-      } catch (conversionError) {
-        console.error('PDF conversion error:', conversionError);
-        throw new Error(`PDF conversion failed: ${conversionError.message}`);
+      }).promise();
+
+      console.log(`Successfully uploaded PNG to S3: ${pngKey}`);
+
+      return {
+        pngKey,
+        pngFileName,
+        pngSize: pngBuffer.length
+      };
+
+    } finally {
+      // Clean up temporary directory
+      try {
+        await fs.rm(tempDir, { recursive: true, force: true });
+        console.log("Cleaned up temporary files");
+      } catch (cleanupError) {
+        console.error("Error cleaning up temporary files:", cleanupError);
+        // Don't throw the error as the conversion was successful
       }
     }
 
-    // Create PNG filename and upload to S3
-    const pngFileName = fileName.replace(/\.(pdf|png)$/i, '.png');
-    const pngKey = getFileNameWithFolder(pngFileName, userInfo.libraryAccountKey);
-
-    await s3.putObject({
-      Bucket: bucketName,
-      Key: pngKey,
-      Body: pngBuffer,
-      ContentType: 'image/png',
-      ACL: 'public-read'
-    }).promise();
-
-    console.log(`File processing and upload completed: ${pngKey}`);
-
-    return { pngKey, pngFileName, pngSize: pngBuffer.length };
   } catch (error) {
-    console.error('PDF to PNG conversion error:', error);
+    console.error('PDF conversion error:', error);
+    // Add more context to the error
+    const enhancedError = new Error(`PDF conversion failed: ${error.message}`);
+    enhancedError.originalError = error;
+    enhancedError.fileName = fileName;
+    enhancedError.bucket = bucketName;
+    throw enhancedError;
     throw new Error(`PDF to PNG conversion failed: ${error.message}`);
   }
 };

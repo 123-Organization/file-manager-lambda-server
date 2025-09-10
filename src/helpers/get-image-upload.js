@@ -142,7 +142,7 @@ const getImageUploadedv2 = async (obj, uploadedImages,svgImageUrl,extractedFilen
     };
     log(`Prepared to upload the Image details to finerwork service ${JSON.stringify(payloadForFinerWorks)}`);
     console.log("step5",payloadForFinerWorks);
-    // const getImage = await finerworksService.POST_IMAGE(payloadForFinerWorks);
+    const getImage = await finerworksService.POST_IMAGE(payloadForFinerWorks);
     console.log("step5");
 
     return getImage;
