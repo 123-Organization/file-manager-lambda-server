@@ -12,7 +12,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.511.0",
     "aws-lambda": "^1.0.7",
-    "axios": "^1.6.7",
+    "axios": "^1.12.2",
     "body-parser": "^1.20.2",
     "cors": "^2.8.5",
     "debug": "^4.3.4",
@@ -26,7 +26,7 @@
     "pdf-to-img": "^5.0.0",
     "probe-image-size": "^7.2.3",
     "serverless-http": "^3.2.0",
-    "sharp": "^0.34.3",
+    "sharp": "^0.34.4",
     "uuidv4": "^6.2.13"
   }
 }
