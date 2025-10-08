@@ -996,11 +996,16 @@ const convertPdfToPngAndUpload = async (params, userInfo, fileName, folderPath) 
 
           // Optimize the PNG with Sharp
           pngBuffer = await sharp(result)
-            .resize(2000, 2000, { fit: 'inside' })
+            .resize(3000, 3000, { 
+              fit: 'inside',
+              withoutEnlargement: true,
+              kernel: 'lanczos3'
+            })
             .png({
-              quality: 75,
+              quality: 100,
               progressive: true,
-              compressionLevel: 9
+              compressionLevel: 6,
+              force: true
             })
             .toBuffer();
 
@@ -1110,7 +1115,7 @@ const convertEpsToPdfAndUpload = async (params, userInfo, fileName, folderPath) 
     // Convert EPS to PDF using Ghostscript
     const pdfPath = path.join(tempDir, 'output.pdf');
     await new Promise((resolve, reject) => {
-      exec(`gs -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -sOutputFile=${pdfPath} ${epsPath}`, (error) => {
+      exec(`gs -dNOPAUSE -dBATCH -dSAFER -sDEVICE=pdfwrite -dEPSCrop -dCompatibilityLevel=1.7 -dPDFSETTINGS=/prepress -r300 -dColorImageResolution=300 -dGrayImageResolution=300 -dMonoImageResolution=300 -sOutputFile=${pdfPath} ${epsPath}`, (error) => {
         if (error) {
           reject(error);
         } else {
@@ -1119,9 +1124,19 @@ const convertEpsToPdfAndUpload = async (params, userInfo, fileName, folderPath) 
       });
     });
 
+    // Validate PDF conversion
+    const pdfContent = await fs.readFile(pdfPath);
+    if (!pdfContent || pdfContent.length < 100) {
+      throw new Error('EPS to PDF conversion failed: Output file is too small or empty');
+    }
+
+    // Check if the PDF starts with the PDF magic number
+    if (pdfContent.toString('ascii', 0, 4) !== '%PDF') {
+      throw new Error('EPS to PDF conversion failed: Invalid PDF output');
+    }
+
     // Upload PDF to S3
     const pdfKey = params.Key.replace(/\.eps$/i, '.pdf');
-    const pdfContent = await fs.readFile(pdfPath);
     await s3.putObject({
       Bucket: params.Bucket,
       Key: pdfKey,
