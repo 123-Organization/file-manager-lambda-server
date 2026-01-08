@@ -9,6 +9,9 @@ const { webhookArtzipUpload } = require('./webhook-artzip-upload');
 const { getMyCredentials } = require('./get-my-credentials');
 const { uploadImageByURL } = require('./upload-image-by-url');
 const app = Router();
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok', message: 'Service is healthy' });
+});
 app.post('/getallimages',getAllImages);
 app.put('/updateimage',updateImage);
 app.delete('/deleteimage',deleteImage); 
