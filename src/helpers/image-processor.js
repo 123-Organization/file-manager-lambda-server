@@ -34,10 +34,13 @@ const generateThumbnail = async (originalImageUrl, thumbnailKey, bucketName) => 
       background: { r: 255, g: 255, b: 255, alpha: 1 }, // White background
       kernel: 'lanczos3' // High-quality resampling
     })
-    .jpeg({
-      quality: 80,
-      force: true, // Force JPEG output
-      optimizeScans: true // Optimize JPEG encoding
+    // PNG/SVG-derived images often have transparency; flatten to avoid black output in consumers.
+    .flatten({ background: { r: 255, g: 255, b: 255 } })
+    .toColourspace('srgb')
+    .png({
+      compressionLevel: 9,
+      adaptiveFiltering: true,
+      force: true
     })
     .toBuffer({ resolveWithObject: true }); // Get output info
 
@@ -49,7 +52,7 @@ const generateThumbnail = async (originalImageUrl, thumbnailKey, bucketName) => 
       Bucket: bucketName,
       Key: thumbnailKey,
       Body: thumbnailBuffer.data,
-      ContentType: 'image/jpeg',
+      ContentType: 'image/png',
       ACL: 'public-read'
     };
     console.log("uploadParams=======+>>>>>", uploadParams);
@@ -91,10 +94,13 @@ const generatePreview = async (originalImageUrl, previewKey, bucketName) => {
       background: { r: 255, g: 255, b: 255, alpha: 1 },
       kernel: 'lanczos3'
     })
-    .jpeg({
-      quality: 85,
-      force: true,
-      optimizeScans: true
+    // Flatten alpha to avoid black previews in consumers.
+    .flatten({ background: { r: 255, g: 255, b: 255 } })
+    .toColourspace('srgb')
+    .png({
+      compressionLevel: 9,
+      adaptiveFiltering: true,
+      force: true
     })
     .toBuffer({ resolveWithObject: true });
     
@@ -104,7 +110,7 @@ const generatePreview = async (originalImageUrl, previewKey, bucketName) => {
       Bucket: bucketName,
       Key: previewKey,
       Body: previewBuffer.data,
-      ContentType: 'image/jpeg',
+      ContentType: 'image/png',
       ACL: 'public-read'
     };
     

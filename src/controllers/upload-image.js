@@ -9,9 +9,14 @@ const { exec } = require('child_process');
 const getBucketName = require('../helpers/get-bucket-name');
 const getFileNameWithFolder = require('../helpers/get-file-name-with-folder');
 const getImageUrl = require('../helpers/get-image-url');
+const getImageUrlV2 = require('../helpers/get-image-url-v2');
 const checkImageUrls = require('../helpers/check-image-url-existence');
 // const getImageUploaded = require('../helpers/get-image-upload');
 const { getImageUploaded, getImageUploadedv2 } = require('../helpers/get-image-upload');
+const testImageResolution = require('../helpers/test-image-resolution');
+const getFileName = require('../helpers/get-file-name');
+const finerworksService = require('../helpers/finerworks-service');
+const { generateThumbnail, generatePreview } = require('../helpers/image-processor');
 
 const checkForImageExtensionForTiffNBmp = require('../helpers/get-image-extenstion-for-bmp-n-tiff');
 const debug = require('debug');
@@ -724,8 +729,49 @@ const updateFineworksAPIWithBothFiles = async (userInfo, fileName, folderPath, c
     // Upload SVG to Fineworks API
 // const svgResult = await getImageUploaded(obj, svgUploadedImages);
     
-    // Upload PNG to Fineworks API
-    const pngResult = await getImageUploadedv2(obj, pngUploadedImages,svgImageUrl,extractedFilename);
+    // Generate thumbnail + preview from the PNG (converted from SVG) and upload to S3
+    const getFileNameToBeUploaded = await checkForImageExtensionForTiffNBmp(pngUploadedImages.key);
+    const imageName = getFileName(getFileNameToBeUploaded);
+    const imageSize = await testImageResolution(pngUploadedImages.location);
+
+    const thumbnailKey = getImageUrlV2(libraryName, getFileNameToBeUploaded, 'thumbnail', libraryAccountKey);
+    const previewKey = getImageUrlV2(libraryName, getFileNameToBeUploaded, 'preview', libraryAccountKey);
+    const [thumbnailSuccess, previewSuccess] = await Promise.all([
+      generateThumbnail(pngUploadedImages.location, thumbnailKey, bucketName),
+      generatePreview(pngUploadedImages.location, previewKey, bucketName),
+    ]);
+
+    if (!thumbnailSuccess || !previewSuccess) {
+      throw new Error('Failed to generate thumbnail or preview');
+    }
+
+    // Update Fineworks using the SVG as hires/private URI, and generated thumbnail/preview URLs
+    const payloadForFinerWorks = {
+      images: [
+        {
+          title: "",
+          description: "",
+          file_name: extractedFilename,
+          file_size: pngUploadedImages.size,
+          thumbnail_file_name: `200x200_${imageName}`,
+          preview_file_name: imageName,
+          hires_file_name: extractedFilename,
+          public_thumbnail_uri: thumbnailSuccess.Location,
+          public_preview_uri: previewSuccess.Location,
+          private_hires_uri: svgImageUrl,
+          pix_w: imageSize.width,
+          pix_h: imageSize.height,
+        },
+      ],
+      library: {
+        name: libraryName,
+        session_id: librarySessionId,
+        account_key: libraryAccountKey,
+        site_id: librarySiteId,
+      },
+    };
+
+    const pngResult = await finerworksService.POST_IMAGE(payloadForFinerWorks);
     
     log(`Both SVG and PNG files uploaded to Fineworks API successfully`);
     
@@ -793,11 +839,50 @@ const updateFineworksAPIWithBothFilesForPdf = async (userInfo, fileName, folderP
 
     console.log("pngImageUrl=========>>>>>>>",pngImageUrl);
 
-    // Upload both files to Fineworks API
-    const result = await getImageUploadedv2(obj, pngUploadedImages, pdfImageUrl, extractedFilename);
-    
+    // Generate thumbnail + preview from the PNG (converted from PDF/EPS) and upload to S3
+    const getFileNameToBeUploaded = await checkForImageExtensionForTiffNBmp(pngUploadedImages.key);
+    const imageName = getFileName(getFileNameToBeUploaded);
+    const imageSize = await testImageResolution(pngUploadedImages.location);
+
+    const thumbnailKey = getImageUrlV2(libraryName, getFileNameToBeUploaded, 'thumbnail', libraryAccountKey);
+    const previewKey = getImageUrlV2(libraryName, getFileNameToBeUploaded, 'preview', libraryAccountKey);
+    const [thumbnailSuccess, previewSuccess] = await Promise.all([
+      generateThumbnail(pngUploadedImages.location, thumbnailKey, bucketName),
+      generatePreview(pngUploadedImages.location, previewKey, bucketName),
+    ]);
+
+    if (!thumbnailSuccess || !previewSuccess) {
+      throw new Error('Failed to generate thumbnail or preview');
+    }
+
+    // Upload PNG (with thumbnail/preview) to Fineworks API, keeping the PDF as the hires/private URI
+    const payloadForFinerWorks = {
+      images: [
+        {
+          title: "",
+          description: "",
+          file_name: extractedFilename,
+          file_size: pngUploadedImages.size,
+          thumbnail_file_name: `200x200_${imageName}`,
+          preview_file_name: imageName,
+          hires_file_name: extractedFilename,
+          public_thumbnail_uri: thumbnailSuccess.Location,
+          public_preview_uri: previewSuccess.Location,
+          private_hires_uri: pdfImageUrl,
+          pix_w: imageSize.width,
+          pix_h: imageSize.height,
+        },
+      ],
+      library: {
+        name: libraryName,
+        session_id: librarySessionId,
+        account_key: libraryAccountKey,
+        site_id: librarySiteId,
+      },
+    };
+
+    const result = await finerworksService.POST_IMAGE(payloadForFinerWorks);
     log(`Both PDF and PNG files uploaded to Fineworks API successfully`);
-    
     return result;
     
   } catch (error) {
