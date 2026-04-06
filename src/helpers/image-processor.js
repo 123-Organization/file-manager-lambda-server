@@ -34,6 +34,9 @@ const generateThumbnail = async (originalImageUrl, thumbnailKey, bucketName) => 
       background: { r: 255, g: 255, b: 255, alpha: 1 }, // White background
       kernel: 'lanczos3' // High-quality resampling
     })
+    // JPEG has no alpha: transparent PNG areas become black unless composited onto white first.
+    .flatten({ background: { r: 255, g: 255, b: 255 } })
+    .toColourspace('srgb')
     .jpeg({
       quality: 80,
       force: true, // Force JPEG output
@@ -91,6 +94,8 @@ const generatePreview = async (originalImageUrl, previewKey, bucketName) => {
       background: { r: 255, g: 255, b: 255, alpha: 1 },
       kernel: 'lanczos3'
     })
+    .flatten({ background: { r: 255, g: 255, b: 255 } })
+    .toColourspace('srgb')
     .jpeg({
       quality: 85,
       force: true,
