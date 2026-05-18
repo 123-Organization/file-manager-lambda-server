@@ -5,7 +5,7 @@ const finerworksService = require('../helpers/finerworks-service');
 exports.getAllImages = async (req, res) => {
     
     const obj = req.body;
-    const { libraryName, librarySessionId, libraryAccountKey, librarySiteId, filterPageNumber, filterPerPage, filterSearchFilter, filterUploadFrom, filterUploadTo, filterSortField, filterSortDirection } = obj;
+    const { libraryName, librarySessionId, libraryAccountKey, librarySiteId, filterPageNumber, filterPerPage, filterSearchFilter, filterUploadFrom, filterUploadTo, filterSortField, filterSortDirection,guid_filter } = obj;
     log(`Get all images for the ${JSON.stringify(obj)}`);
     try {
       let payloadForListImages = {
@@ -16,6 +16,7 @@ exports.getAllImages = async (req, res) => {
           site_id: librarySiteId,
         },
         search_filter: filterSearchFilter,
+        guid_filter:guid_filter,
         page_number: filterPageNumber,
         per_page: filterPerPage,
         list_products: true,
